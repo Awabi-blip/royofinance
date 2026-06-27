@@ -1,0 +1,2 @@
+ALTER TABLE bank_branches 
+ENABLE ROW LEVEL SECURITY;

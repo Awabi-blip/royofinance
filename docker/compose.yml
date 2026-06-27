@@ -1,0 +1,11 @@
+services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: postgres      # The username
+      POSTGRES_PASSWORD: postgres  # The password you wanted
+      POSTGRES_DB: banking_system         # The name of the database
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
