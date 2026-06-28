@@ -3,7 +3,7 @@ from jose import jwt, JWTError
 from fastapi import FastAPI, Header, HTTPException, Depends, Request, Response, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
 from contextlib import asynccontextmanager
-from pydantic import BaseModel, TypeAdapter, Field
+from pydantic import BaseModel, TypeAdapter, Field, field_validator
 from typing import Annotated
 import os
 from dotenv import load_dotenv
@@ -76,12 +76,18 @@ class UserSignup(BaseModel):
     password: str
     token: uuid.UUID
 
+    @model_validator(mode='before')
+    @classmethod
+    def strip_strings(cls, values):
+        return {
+            k: v.strip() if isinstance(v, str) else v
+            for k, v in values.items()
+        }
+
 # first time sign in function
 @app.post("/signup")
 async def signup(user: UserSignup):
     hashed_password = pwd_hash.hash(user.password)
-    
-    username = user.username.strip()
 
     """
     Function Params:
