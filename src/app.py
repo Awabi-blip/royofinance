@@ -78,11 +78,14 @@ class UserSignup(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def strip_strings(cls, values):
-        return {
-            k: v.strip() if isinstance(v, str) else v
-            for k, v in values.items()
-        }
+    def strip_strings(values):
+    cleaned = {}
+    for k, v in values.items():
+        if isinstance(v, str):
+            cleaned[k] = v.strip()
+        else:
+            cleaned[k] = v
+    return cleaned
 
 # first time sign in function
 @app.post("/signup")
