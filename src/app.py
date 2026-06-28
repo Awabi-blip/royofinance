@@ -81,7 +81,7 @@ class UserSignup(BaseModel):
 async def signup(user: UserSignup):
     hashed_password = pwd_hash.hash(user.password)
     
-    username = username.strip()
+    username = user.username.strip()
 
     """
     Function Params:
