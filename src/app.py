@@ -78,7 +78,7 @@ class UserSignup(BaseModel):
 
     @model_validator(mode='before')
     @classmethod
-    def strip_strings(values):
+    def strip_strings(cls, values):
     cleaned = {}
     for k, v in values.items():
         if isinstance(v, str):
