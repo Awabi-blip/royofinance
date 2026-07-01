@@ -70,22 +70,19 @@ async def postgres_exception_handler(request, exc):
 RLS WILL HANDLE ALL THE SELECTS, YOU DONT HAVE TO WRITE ANY WHERE CLAUSES!
 """
 
-
-class UserSignup(BaseModel):
-    username: str
-    password: str
-    token: uuid.UUID
-
+class StripStringsMixin(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def strip_strings(cls, values):
-    cleaned = {}
-    for k, v in values.items():
-        if isinstance(v, str):
-            cleaned[k] = v.strip()
-        else:
-            cleaned[k] = v
-    return cleaned
+        return {
+            k: v.strip() if isinstance(v, str) else v
+            for k,v in values.items()
+        }
+
+class UserSignup(StripStringsMixin, BaseModel):
+    username: str
+    password: str
+    token: uuid.UUID
 
 # first time sign in function
 @app.post("/signup")
@@ -110,7 +107,7 @@ async def signup(user: UserSignup):
     # return RedirectResponse(url="/login")
 
 
-class UserLogin(BaseModel):
+class UserLogin(StripStringsMixin, BaseModel):
     username: str
     password: str
 
@@ -242,7 +239,7 @@ response: Response, role_selection_cookie: str = Cookie(None)):
     return {"status": "OK"}
     
 
-class PayloadApp(BaseModel):
+class PayloadApp(StripStringsMixin, BaseModel):
     id: uuid.UUID
     username: str
     exp: datetime
@@ -438,7 +435,7 @@ raiden_vs_armstrong = """
         OK, LETS DANCE! STANDING HERE I REALISEEEEEEEEEEEEEEEEE.
         """
 
-class depositMoney(BaseModel):
+class depositMoney(StripStringsMixin, BaseModel):
     account_number: uuid.UUID
     customer_id: uuid.UUID
     amount : Decimal = Field(
@@ -475,7 +472,7 @@ user = Depends(verify_user)):
 
     # return RedirectResponse(url="/account_info", status_code=303)
 
-class withdrawMoney(BaseModel):
+class withdrawMoney(StripStringsMixin,BaseModel):
     account_number : uuid.UUID
     customer_id: uuid.UUID
     amount : Decimal = Field(
