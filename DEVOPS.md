@@ -14,7 +14,7 @@
 - Combined non-eviction cache for Rate Limiter + Fraud Detection
 - Note you can seggregate both, it depends on your needs.
  (P.S you can also use DynamoDB/FASTER/RocksDB) for fraud detectors too, if you need presistent storage for long term.
-- You can also use DragonFly if you wish.
+- You can also use DragonFly if you wish instead of Valkey
 
 ### PyO3 with Rust for logic:
 - For high speed checks and concurrency.
