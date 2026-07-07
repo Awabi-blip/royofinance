@@ -2,7 +2,7 @@
 # Transactions/Actions/Loan Payments etc (Post Requests in General)
 
 ## Design Diagram:
-![Sys_Design](sys_design.png)
+![Sys_Design](sys_design_img.png)
 
 ### Load Balancer:
 - Forwards Requests to FastAPI workers
