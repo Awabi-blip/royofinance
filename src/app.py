@@ -3,7 +3,7 @@ from jose import jwt, JWTError
 from fastapi import FastAPI, Header, HTTPException, Depends, Request, Response, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
 from contextlib import asynccontextmanager
-from pydantic import BaseModel, TypeAdapter, Field, field_validator
+from pydantic import BaseModel, TypeAdapter, Field, field_validator, model_validator
 from typing import Annotated
 import os
 from dotenv import load_dotenv
