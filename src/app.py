@@ -375,12 +375,13 @@ async def account_info(user = Depends(verify_user)):
     return user_bank_account_rows
 
 class sendMoney(BaseModel):
-    sender_account_number: uuid.UUID
+    sender_account_type: e_account_type
     receiver_account_number: uuid.UUID
     amount : Decimal = Field(
         ge=Decimal('0.00'),
         le=Decimal('4000000.00')
     )
+
 @app.get("/send_money")
 async def show_money(
     user = Depends(verify_user)
@@ -409,14 +410,14 @@ user = Depends(verify_user)):
     """
     Function Params:
     PROCEDURE send_money (
-    p_sender_account_number UUID,
+    p_sender_account_type UUID,
     p_receiver_account_number UUID,
     p_amount DECIMAL(9,2))  
     """
 
     await db.execute(
         "CALL send_money($1, $2, $3)",
-        info.sender_account_number, 
+        info.sender_account_type, 
         info.receiver_account_number, info.amount, user_id=user.id
     )
 

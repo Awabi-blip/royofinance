@@ -1,14 +1,27 @@
+-- Active: 1776099699305@@127.0.0.1@5432@banking_system
+
 CREATE OR REPLACE PROCEDURE send_money(
-p_sender_account_number UUID,
+p_sender_account_type e_account_type,
 p_receiver_account_number UUID,
 p_amount DECIMAL(9,2))
 SECURITY DEFINER
 AS $$
 DECLARE
 v_sender_balance DECIMAL(19,2);
+v_sender_account_number UUID;
 v_receiver_id UUID;
 v_sender_id UUID;
 BEGIN
+    
+    IF p_amount <= 0 THEN
+        RAISE EXCEPTION
+            'too little sent at once';
+    END IF;
+
+    IF p_amount > 4000000 THEN
+        RAISE EXCEPTION 'too much amount sent at once';
+    END IF;
+
     v_sender_id := current_setting('myapp.user_id')::UUID;
 
     IF NOT EXISTS 
@@ -23,20 +36,16 @@ BEGIN
         RAISE EXCEPTION 'Operation failed: No id found for customer %', v_sender_id;
     END IF;
 
-    IF p_sender_account_number = p_receiver_account_number THEN
+    SELECT  account_number 
+    INTO    v_sender_account_number
+    FROM    user_bank_accounts
+    WHERE   customer_id = v_sender_id
+    AND     account_type = p_account_type;
+
+    IF v_sender_account_number = p_receiver_account_number THEN
         RAISE EXCEPTION
             'not possible';
     END IF;
-
-    IF p_amount <= 0 THEN
-        RAISE EXCEPTION
-            'not possible';
-    END IF;
-
-    IF p_amount > 4000000 THEN
-        RAISE EXCEPTION '';
-    END IF;
-
 
     SELECT customer_id
     INTO v_receiver_id
@@ -48,18 +57,18 @@ BEGIN
             'not possible';
     END IF;
 
-
     PERFORM 1 FROM user_bank_accounts 
     WHERE customer_id IN (v_sender_id, v_receiver_id) 
     ORDER BY (customer_id) FOR UPDATE;
     
     SELECT balance INTO v_sender_balance
     FROM user_bank_accounts
-    WHERE customer_id = v_sender_id 
-    AND account_number = p_sender_account_number
+    WHERE customer_id    = v_sender_id 
+    AND   account_type   = p_sender_account_type
+    AND   account_number = v_sender_account_number
     FOR UPDATE;
 
-    IF v_sender_balance IS NULL THEN
+    IF NOT FOUND THEN
         RAISE EXCEPTION 'no balance added, hence no transactions must take place, fair as all things must be. period.';
     END IF;
 
@@ -70,7 +79,7 @@ BEGIN
     UPDATE user_bank_accounts
     SET balance = balance - p_amount
     WHERE customer_id = v_sender_id
-    AND account_number = p_sender_account_number;
+    AND account_number = v_sender_account_number;
 
     UPDATE user_bank_accounts
     SET balance = balance + p_amount
@@ -82,7 +91,7 @@ BEGIN
     receiver_account_number,
     amount
     ) VALUES (
-        p_sender_account_number,
+        v_sender_account_number,
         p_receiver_account_number,
         p_amount
     );
