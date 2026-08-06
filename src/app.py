@@ -7,7 +7,7 @@ from pydantic import BaseModel, TypeAdapter, Field, field_validator, model_valid
 from typing import Annotated
 import os, time, uuid, asyncpg, asyncio
 from dotenv import load_dotenv
-from database_driver import DatabaseDriver
+from .database_driver import DatabaseDriver
 from datetime import datetime, timezone, timedelta
 from pwdlib import PasswordHash
 from enum import Enum
