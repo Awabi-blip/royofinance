@@ -30,8 +30,3 @@
 ### Trigger Guards
 - `user_auth` → blocks cross-branch inserts, blocks password being set on insert
 - `user_auth_setup_token` → blocks token creation if user already has a password
-
-# Issues:
-## user_auth_setup_token
-user auth setup token allows admin to add themselves into auth_token, need a fix
-no security for user_auth_password_set
