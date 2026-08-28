@@ -8,27 +8,34 @@ from typing import Annotated
 import os, time, uuid, asyncpg, asyncio
 from dotenv import load_dotenv
 from .database_driver import DatabaseDriver
+from .valkey_driver import ValkeyDriver
 from datetime import datetime, timezone, timedelta
 from pwdlib import PasswordHash
 from enum import Enum
 import asyncpg
 from decimal import Decimal
+from glide import Batch, ExpireOptions
 
 db = DatabaseDriver()
+valkey = ValkeyDriver()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
+    await valkey.connect()
     yield
     await db.pool.close()
 
 app = FastAPI(lifespan=lifespan)
+
 
 load_dotenv()
 jwt_key = str(os.getenv("JWT_KEY")).strip()
 bank_verification_password = str(os.getenv("BANK_VERIFICATION_PASSWORD")).strip()
 
 pwd_hash = PasswordHash.recommended()
+
+
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
@@ -63,6 +70,42 @@ async def plpgsql_exception_handler(request, exc):
 async def postgres_exception_handler(request, exc):
     return JSONResponse(status_code=500, 
     content={"detail": str(exc)})
+
+
+@app.middleware("http")
+async def rate_limiter(request: Request, call_next,):
+
+    kv = valkey.get_client()
+    client_host = request.client.host
+
+    if not client_host:
+        return JSONResponse(status_code=400, 
+        content={"detail": "Bad Request"})
+    
+    key = f"rl:{client_host}"
+
+    batch = Batch(True)
+
+    batch.incr(key)
+
+    #it would be bad if the timer reset on every request. 
+    # think about it for a second, request comes in, 
+    # increment the key, now the key which was about to expire 
+    # in say 3seconds, would expire in 60, while i still increment the key, 
+    # technically it would be fine, because the count is being incremented, 
+    # but it means the user would have to wait for longer
+    batch.expire(key, 60, ExpireOptions.HasNoExpiry)
+
+    results = await kv.exec(batch, raise_on_error = True)
+
+    requests_count = results[0]
+
+    if requests_count >= 60:
+        return JSONResponse(429, content={"detail": "Too many requests"})
+
+    response = await call_next(request)
+    return response
+
 
 
 """

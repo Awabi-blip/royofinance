@@ -13,4 +13,5 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "python-jose>=3.5.0",
     "uvicorn>=0.44.0",
+    "valkey-glide>=2.5.1",
 ]

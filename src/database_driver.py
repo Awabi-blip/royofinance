@@ -14,7 +14,6 @@ class DatabaseDriver:
         self.pool = await asyncpg.create_pool(self.url, max_size = 20)
         print("DB connected successfully ✅")
     
-    
     # FOR SELECT
     async def fetch(self, query, *args, user_id=None):
         async with self.pool.acquire() as connection:
