@@ -130,6 +130,8 @@ class UserSignup(StripStringsMixin, BaseModel):
 @app.post("/signup")
 async def signup(user: UserSignup):
 
+    # checks is atleast one character an alpha? 
+    # any returns true if atleast one of the items are true   
     if not any(c.is_alpha for c in password):
         return JSONResponse(status_code=400, content={"detail": "Password should have a letter"})
 

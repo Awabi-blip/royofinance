@@ -1,11 +1,6 @@
 from glide import GlideClient, GlideClientConfiguration, NodeAddress
 import asyncio
 
-config = GlideClientConfiguration(
-    addresses=[NodeAddress("localhost", 6379)],
-    database_id=0,
-)
-
 class ValkeyDriver:
 
     def __init__(self):
