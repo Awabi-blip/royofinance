@@ -3,7 +3,7 @@ from jose import jwt, JWTError
 from fastapi import FastAPI, Header, HTTPException, Depends, Request, Response, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
 from contextlib import asynccontextmanager
-from pydantic import BaseModel, TypeAdapter, Field, field_validator, model_validator
+from pydantic import BaseModel, TypeAdapter, Field, field_validator, model_validator,StringConstraints
 from typing import Annotated
 import os, time, uuid, asyncpg, asyncio
 from dotenv import load_dotenv
@@ -101,7 +101,7 @@ async def rate_limiter(request: Request, call_next,):
     requests_count = results[0]
 
     if requests_count >= 60:
-        return JSONResponse(429, content={"detail": "Too many requests"})
+        return JSONResponse(status_code=429, content={"detail": "Too many requests"})
 
     response = await call_next(request)
     return response
@@ -123,13 +123,24 @@ class StripStringsMixin(BaseModel):
 
 class UserSignup(StripStringsMixin, BaseModel):
     username: str
-    password: str
+    password: Annotated[str, StringConstraints(min_length=10)]
     token: uuid.UUID
 
 # first time sign in function
 @app.post("/signup")
 async def signup(user: UserSignup):
-    hashed_password = pwd_hash.hash(user.password)
+
+    if not any(c.is_alpha for c in password):
+        return JSONResponse(status_code=400, content={"detail": "Password should have a letter"})
+
+    if not any(c.upper for c in password):
+        return JSONResponse(status_code=400, content={"detail": "Password should have an uppercase character"})
+
+    if not any(c.lower for c in password):
+        return JSONResponse(status_code=400, content={"detail": "Password should have an uppercase character"})
+
+    if not any(c.is_num for c in password):
+        return JSONResponse(status_code=400, content={"detail": "Password should have a number"})
 
     """
     Function Params:
