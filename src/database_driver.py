@@ -32,6 +32,12 @@ class DatabaseDriver:
             
             await connection.execute(query, *args)
 
-
+    async def fetch_dict(self, query, *args, user_id=None):
+        async with self.pool.acquire() as connection:
+            if user_id:
+                await connection.execute(f"SELECT set_config('myapp.user_id', $1, false)", str(user_id))            
+            result = await connection.fetch(query, *args)
+            
+            return [dict(item) for item in result]
 
             

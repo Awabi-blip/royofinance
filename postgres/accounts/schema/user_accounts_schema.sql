@@ -1,3 +1,4 @@
+-- Active: 1776099699305@@127.0.0.1@5432@banking_system@public
 --TODO : enum type for saving vs active account
 CREATE TYPE e_account_type AS ENUM('active', 'saving');
 
@@ -10,10 +11,11 @@ CREATE TABLE IF NOT EXISTS user_bank_accounts(
     balance DECIMAL(18,2) NOT NULL CHECK (balance >= 0), --quadrillions,
     date_created DATE DEFAULT CURRENT_DATE NOT NULL, --don't need exact timestamp for this tbh
     expires_at DATE NOT NULL,
-    UNIQUE(account_number, account_type),
-    PRIMARY KEY(customer_id, account_type), --ok why the flip did i do this, mmm, ionno
+    UNIQUE (customer_id, account_number),
+    PRIMARY KEY(customer_id, account_type),
     FOREIGN KEY (customer_id, role) REFERENCES user_roles(id, role) ON DELETE CASCADE
 );
+
 --forgot to add this:
 ALTER TABLE user_bank_accounts DROP CONSTRAINT "user_bank_accounts_balance_check" 
 

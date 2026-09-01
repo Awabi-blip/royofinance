@@ -1,9 +1,19 @@
 -- Active: 1776099699305@@127.0.0.1@5432@banking_system
 
-CREATE OR REPLACE PROCEDURE send_money(
-p_sender_account_type e_account_type,
-p_receiver_account_number UUID,
-p_amount DECIMAL(9,2))
+DROP PROCEDURE send_money;
+
+-- to make it idempotent, I need an idempotent table.
+-- store idempotent keys as UUID.
+-- it has user_id, function, idemotency key.
+
+
+CREATE OR REPLACE PROCEDURE send_money (
+p_sender_account_type      e_account_type,
+p_receiver_account_number  UUID,
+p_amount                   DECIMAL(9,2),
+p_idempotency_key          UUID,
+OUT p_response             JSONB
+)
 SECURITY DEFINER
 AS $$
 DECLARE
@@ -35,7 +45,7 @@ BEGIN
     THEN 
         RAISE EXCEPTION 'Operation failed: No id found for customer %', v_sender_id;
     END IF;
-
+    
     SELECT  account_number 
     INTO    v_sender_account_number
     FROM    user_bank_accounts
@@ -47,6 +57,19 @@ BEGIN
             'not possible';
     END IF;
 
+    SELECT        response 
+    INTO          p_response
+    FROM          idempotent_responses_accounts
+    WHERE         customer_id     = v_sender_id
+    AND           account_number  = v_sender_account_number
+    AND           idempotency_key = p_idempotency_key
+    AND           method_name     = 'send_money'::idempotent_functions;
+
+    IF FOUND THEN
+        RETURN;
+    END IF;
+              
+
     SELECT customer_id
     INTO v_receiver_id
     FROM user_bank_accounts
@@ -56,6 +79,7 @@ BEGIN
         RAISE EXCEPTION
             'not possible';
     END IF;
+
 
     PERFORM 1 FROM user_bank_accounts 
     WHERE customer_id IN (v_sender_id, v_receiver_id) 
@@ -86,6 +110,30 @@ BEGIN
     WHERE customer_id = v_receiver_id
     AND account_number = p_receiver_account_number;
 
+    -- for a striple like system, the retry should be identical to the first reponse
+
+    p_response := jsonb_build_object(
+    'success',
+    TRUE,
+    'response',
+    'SUCCESSFULLY SENT MONEY'
+    );
+
+    INSERT INTO idempotent_responses_accounts(
+    customer_id, 
+    account_number,
+    idempotency_key, 
+    method_name, 
+    response
+    )
+    VALUES(
+    v_sender_id, 
+    v_sender_account_number, 
+    p_idempotency_key,
+    'send_money'::idempotent_functions,
+    p_response  
+    );
+
     INSERT INTO send_money_audit_logs (
     sender_account_number,
     receiver_account_number,
@@ -98,6 +146,5 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql;
-
 
 

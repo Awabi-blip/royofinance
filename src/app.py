@@ -14,7 +14,8 @@ from pwdlib import PasswordHash
 from enum import Enum
 import asyncpg
 from decimal import Decimal
-from glide import Batch, ExpireOptions
+from glide import Batch, ExpireOptions, ExpirySet, ExpiryType
+import json
 
 db = DatabaseDriver()
 valkey = ValkeyDriver()
@@ -71,6 +72,32 @@ async def postgres_exception_handler(request, exc):
     return JSONResponse(status_code=500, 
     content={"detail": str(exc)})
 
+@app.exception_handler(jose.exceptions.JWTError)
+async def jose_exception_handler(request, exc):
+    return JSONResponse(status_code=500, 
+    content={"detail": str(exc)})
+
+async def cache_fetch(key: str, query: str, *args, ttl:int, user_id=None):
+    kv = valkey.get_client()
+    
+    cache_response = await kv.get(key)
+    
+    if cache_response:
+        return Response(
+            content=cache_response,
+            media_type="application/json"
+        )
+    
+    rows = db.fetch_dict(query, args, user_id=user_id)
+
+    json_rows = json.dumps(rows)
+
+    await kv.set(key, json_rows, expiry=ExpirySet(ExpiryType.SEC,ttl))
+
+    return Response(
+        content=json_rows,
+        media_type="application/json"
+        )
 
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next,):
@@ -80,7 +107,7 @@ async def rate_limiter(request: Request, call_next,):
 
     if not client_host:
         return JSONResponse(status_code=400, 
-        content={"detail": "Bad Request"})
+        content={"detail": "Ip not found"})
     
     key = f"rl:{client_host}"
 
@@ -207,30 +234,30 @@ async def login(user: UserLogin, response: Response):
     # return RedirectResponse(url = "/role_select", status_code=303)
 
 
-
 @app.get("/role_select")
-async def show_roles(response: Response, role_selection_cookie: str = Cookie(None)):
-
-    if role_selection_cookie is None:
-        raise HTTPException(400, "not logged in")
+async def show_roles(role_selection_cookie: str = Cookie(None)):
     
-    try:
-        decoded_token = jwt.decode(role_selection_cookie, jwt_key, algorithms=["HS256"])
-    except jose.exceptions.JWTError:
-        raise HTTPException(404, "bad request")
+    if role_selection_cookie is None:
+        return JSONResponse(status_code=400, content={"detail":"not logged in"})
+    
+    decoded_token = jwt.decode(role_selection_cookie, jwt_key, algorithms=["HS256"])
 
     u_id = decoded_token["id"]
 
-
-    role_rows = await db.fetch(
+    response = await cache_fetch(
+        f"roles:{u_id}",
         
         """
         SELECT role FROM user_roles 
         WHERE id = $1
-        """, u_id, user_id=u_id
-    )
+        """,  
+        
+        (u_id),
 
-    return role_rows
+        ttl=1200, user_id=u_id
+    )
+    
+    return response
 
 class e_user_roles(str, Enum):
     admin = "admin"
@@ -340,6 +367,7 @@ user = Depends(verify_user)):
 
     return {"status":"OK"}
 
+
 @app.get("/view_loan_payments_history")
 async def view_loan_payments(user = Depends(verify_user)):
     if user.role != e_user_roles.customer:
@@ -354,6 +382,7 @@ async def view_loan_payments(user = Depends(verify_user)):
 
     return payments
   
+
 
 @app.get("/view_loans_and_payments")
 async def view_loan_payments(user = Depends(verify_user)):
@@ -389,6 +418,7 @@ class loanPayment(BaseModel):
     )
     account_type: e_account_type
 
+
 @app.post("/pay_for_loans")
 async def pay_for_loans(info: loanPayment, 
 user = Depends(verify_user)
@@ -413,6 +443,7 @@ user = Depends(verify_user)
 
     return f"""payment for your loan has been completed, amount_paid:{info.amount}
     and account_type_used:{info.account_type}"""
+    
     # return RedirectResponse(url="/pay_for_loans", status_code=303)
 
 
@@ -457,7 +488,8 @@ async def show_money(
 
 @app.post("/send_money")
 async def send_money(
-info: sendMoney,
+info:            sendMoney,
+idempotency_key: UUID = Header(alias="Idempotency-Key"),
 user = Depends(verify_user)):
 
     if user.role != e_user_roles.customer:
@@ -471,13 +503,19 @@ user = Depends(verify_user)):
     p_amount DECIMAL(9,2))  
     """
 
-    await db.execute(
-        "CALL send_money($1, $2, $3)",
+    response = await db.execute(
+        "CALL send_money($1, $2, $3, $4)",
         info.sender_account_type, 
-        info.receiver_account_number, info.amount, user_id=user.id
+        info.receiver_account_number, 
+        info.amount,
+        idempotency_key,
+        user_id=user.id
     )
 
-    # return RedirectResponse(url="/account_info", status_code=303)
+    if response["success"]:
+        return RedirectResponse(url="/account_info", status_code=303)
+    else: 
+        return JSONResponse(status_code="500", content="Sorry something went wrong")
 
 
 # ADMIN ONLY FUNCTIONS BELOW 

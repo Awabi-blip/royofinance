@@ -1,33 +1,34 @@
+-- Active: 1776099699305@@127.0.0.1@5432@banking_system@public
 CREATE TYPE e_loan_status AS ENUM ('active', 'paid');
+
+
+-- make this so that pending_loans have a bank_account
+-- QOL improvement, not that there are any bugs in this.
 
 CREATE TABLE IF NOT EXISTS pending_loans(
     customer_id UUID,
-    customer_role e_user_roles CHECK(customer_role = 'customer'::e_user_roles) NOT NULL,
     amount DECIMAL(9,2) NOT NULL CHECK(amount >= 0 AND amount <= 1000000),
     event_date DATE DEFAULT CURRENT_DATE NOT NULL,
-    account_type e_account_type NOT NULL,
     bank_account_number UUID NOT NULL,
-    PRIMARY KEY(customer_id),
-    FOREIGN KEY(customer_id, customer_role) REFERENCES user_roles(id,role),
-    FOREIGN KEY (account_type, bank_account_number) REFERENCES user_bank_accounts(account_type, account_number)
+    PRIMARY KEY (customer_id),
+    FOREIGN KEY (customer_id, bank_account_number)
+    REFERENCES user_bank_accounts(customer_id, account_number)
 );
 
 CREATE TABLE IF NOT EXISTS loans (
-    id SERIAL,
-    customer_id UUID NOT NULL,
-    customer_role e_user_roles CHECK(customer_role = 'customer'::e_user_roles) NOT NULL,
-    amount DECIMAL(9,2) NOT NULL CHECK(amount>= 0 AND amount <= 1000000),
-    status e_loan_status NOT NULL DEFAULT 'active',
-    approved_by UUID NOT NULL,
-    approver_role e_user_roles NOT NULL,
-    account_type e_account_type NOT NULL,
-    bank_account_number UUID NOT NULL,
-    event_date DATE DEFAULT CURRENT_DATE NOT NULL,
-    PRIMARY KEY(id),
-    FOREIGN KEY(customer_id, customer_role) REFERENCES user_roles(id, role),
-    FOREIGN KEY(approved_by,approver_role) REFERENCES user_roles(id, role),
-    FOREIGN KEY (account_type, bank_account_number) REFERENCES user_bank_accounts(account_type, account_number)
+    id                  SERIAL,
+    customer_id         UUID                      NOT NULL,
+    amount              DECIMAL(9,2)              NOT NULL CHECK(amount>= 0 AND amount <= 1000000),
+    status              e_loan_status             NOT NULL DEFAULT 'active',
+    approved_by         UUID                      NOT NULL,
+    approver_role       e_user_roles              NOT NULL,
+    bank_account_number UUID                      NOT NULL,
+    event_date          DATE                      NOT NULL DEFAULT CURRENT_DATE,
+    PRIMARY KEY (id),
+    FOREIGN KEY (approved_by,approver_role)        REFERENCES user_roles(id, role),
+    FOREIGN KEY (customer_id, bank_account_number) REFERENCES user_bank_accounts(customer_id, account_number)
 );
+
 
 ALTER TABLE loans ADD constraint loan_amount_check CHECK (amount>= 0 AND amount <= 1000000);
 
