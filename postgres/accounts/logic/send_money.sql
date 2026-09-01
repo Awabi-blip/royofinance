@@ -63,6 +63,7 @@ BEGIN
     WHERE         customer_id     = v_sender_id
     AND           account_number  = v_sender_account_number
     AND           idempotency_key = p_idempotency_key
+    AND           expires_at      > now()
     AND           method_name     = 'send_money'::idempotent_functions;
 
     IF FOUND THEN

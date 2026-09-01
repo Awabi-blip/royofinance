@@ -15,9 +15,13 @@ CREATE TABLE idempotent_responses_accounts(
     idempotency_key UUID                 NOT NULL,
     method_name     idempotent_functions NOT NULL,
     response        JSONB                NOT NULL,
+    added_on        TIMESTAMPTZ          NOT NULL DEFAULT now(),
+    expires_at      TIMESTAMPTZ          NOT NULL DEFAULT now() + INTERVAL '72 Hours'
     UNIQUE                               (customer_id, idempotency_key, method_name),
     FOREIGN KEY                          (customer_id, account_number) 
     REFERENCES user_bank_accounts        (customer_id, account_number)
 )
 
-ALTER TABLE 
+ALTER TABLE idempotent_responses_accounts ADD COLUMN added_on TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE idempotent_responses_accounts ADD COLUMN expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + INTERVAL '72 Hours'
