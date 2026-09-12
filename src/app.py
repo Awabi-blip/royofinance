@@ -77,6 +77,7 @@ async def jose_exception_handler(request, exc):
     return JSONResponse(status_code=500, 
     content={"detail": str(exc)})
 
+
 async def cache_fetch(key: str, query: str, *args, ttl:int, user_id=None):
     kv = valkey.get_client()
     
@@ -98,6 +99,7 @@ async def cache_fetch(key: str, query: str, *args, ttl:int, user_id=None):
         content=json_rows,
         media_type="application/json"
         )
+
 
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next,):
@@ -139,16 +141,9 @@ async def rate_limiter(request: Request, call_next,):
 RLS WILL HANDLE ALL THE SELECTS, YOU DONT HAVE TO WRITE ANY WHERE CLAUSES!
 """
 
-class StripStringsMixin(BaseModel):
-    @model_validator(mode='before')
-    @classmethod
-    def strip_strings(cls, values):
-        return {
-            k: v.strip() if isinstance(v, str) else v
-            for k,v in values.items()
-        }
 
-class UserSignup(StripStringsMixin, BaseModel):
+class UserSignup(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     username: str
     password: Annotated[str, StringConstraints(min_length=10)]
     token: uuid.UUID
@@ -189,7 +184,8 @@ async def signup(user: UserSignup):
     # return RedirectResponse(url="/login")
 
 
-class UserLogin(StripStringsMixin, BaseModel):
+class UserLogin(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     username: str
     password: str
 
@@ -322,6 +318,7 @@ response: Response, role_selection_cookie: str = Cookie(None)):
     
 
 class PayloadApp(StripStringsMixin, BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
     id: uuid.UUID
     username: str
     exp: datetime
@@ -582,10 +579,10 @@ async def withdraw_money(info: withdrawMoney,
 user = Depends(verify_user)):
     
     if user.role not in [e_user_roles.admin, e_user_roles.teller]:
-        raise HTTPException(400, "bad request")
+        return JSONResponse(400, "bad request")
     
     if info.bank_verification_password != bank_verification_password:
-        raise HTTPException(400, raiden_vs_armstrong)
+        return JSONResponse(400, raiden_vs_armstrong)
     
     """
     Function Params:
@@ -608,7 +605,7 @@ user = Depends(verify_user)):
     return {"status" : "OK"}
     # return RedirectResponse(url="/account_info", status_code=303)
 
-@app.get("/view_user_info")
+@app.get("/users")
 async def view_user_info(user = Depends(verify_user)):
     if user.role != e_user_roles.admin:
         raise HTTPException(400, 'unauthorized')
@@ -620,3 +617,32 @@ async def view_user_info(user = Depends(verify_user)):
     )
 
     return rows
+
+class RoleRequest(BaseModel):
+    user_id : UUID
+    role: e_user_roles
+
+# ADMIN DASHBOARD:
+
+@app.post("/users/add_role")
+async def get_roles(
+admin = Depends(verify_user),
+info  = RoleRequest
+):
+    kv = valkey.get_client()
+
+    if admin.role != admin:
+        return JSONResponse(400, "bad request")
+
+    await db.execute("INSER INTO user_roles (id, role) VALUES ($1, $2)",
+    info.user_id, info.role, user_id=admin.user_id)
+
+    await kv.delete(f"roles:{info.user_id}")
+
+    return JSONResponse (200, {"Success": "Ok"})
+
+
+
+
+
+

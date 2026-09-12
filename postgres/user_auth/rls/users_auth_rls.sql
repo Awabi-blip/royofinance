@@ -44,11 +44,8 @@ begin
     if not found
         then raise exception 'user is not found';
     end if;
-
-    if user_role = 'owner'::e_user_roles
-      then return new;
-    end if;
     -----------------------------------------------------
+
 
     -----------------------------------------------------
     if new.branch_registered_in != user_branch_id
@@ -78,6 +75,34 @@ USING (
     user_auth WHERE user_auth.id = user_roles.id)
   )
 );
+
+CREATE POLICY admins_see_user_roles ON user_roles
+FOR SELECT TO PUBLIC 
+USING (
+  EXISTS(
+    SELECT 1 FROM user_active_session_roles AS uasr 
+    WHERE uasr.id = current_setting('myapp.user_id')::UUID
+    AND uasr.role = 'admin'::e_user_roles
+    AND uasr.expires_at > now() 
+    AND uasr.branch_id = (SELECT branch_registered_in FROM 
+    user_auth WHERE user_auth.id = user_roles.id)
+  )
+);
+
+CREATE POLICY admins_insert_user_roles ON user_roles
+FOR INSERT TO PUBLIC 
+WITH CHECK (
+  EXISTS(
+    SELECT 1 FROM user_active_session_roles AS uasr 
+    WHERE uasr.id = current_setting('myapp.user_id')::UUID
+    AND uasr.role = 'admin'::e_user_roles
+    AND uasr.expires_at > now() 
+    AND uasr.branch_id = (SELECT branch_registered_in FROM 
+    user_auth WHERE user_auth.id = user_roles.id)
+  )
+);
+
+select * from user_roles ur join user_auth ua on ur.id = ua.id
 
 CREATE POLICY admins_delete_user_roles ON user_roles
 FOR DELETE TO PUBLIC 
@@ -139,58 +164,6 @@ begin
     return new;
 end;
 $$ language plpgsql;
-
--- CREATE OR REPLACE FUNCTION 
--- admins_see_user_active_session_roles()
--- RETURNS TABLE(
---   id UUID,
---   role e_user_roles
--- ) SECURITY DEFINER AS $$
--- DECLARE
---   admin_branch_id INT;
--- BEGIN
-
---   SELECT branch_id INTO admin_branch_id
---   FROM user_active_session_roles AS uasr 
---   WHERE uasr.id = current_setting('myapp.user_id')::UUID
---   AND uasr.role = 'admin'::e_user_roles
---   AND uasr.expires_at > now();
-
---   IF NOT FOUND THEN RAISE EXCEPTION ''; END IF;
-
---   RETURN QUERY
---     SELECT uasr.id, uasr.role FROM user_active_session_roles AS uasr
---     WHERE uasr.branch_id = admin_branch_id;
-  
--- END;
--- $$ LANGUAGE plpgsql;
-
-DROP FUNCTION admins_see_user_active_session_roles;
-
--- CREATE OR REPLACE PROCEDURE 
--- admins_revoke_user_current_access(p_user_id UUID)
--- SECURITY DEFINER AS $$
--- DECLARE
---   admin_branch_id INT;
--- BEGIN 
-
---   IF p_user_id = current_setting('myapp.user_id')::UUID
---     THEN RAISE EXCEPTION '';
---   END IF;
-
---   SELECT branch_id INTO admin_branch_id
---   FROM user_active_session_roles AS uasr 
---   WHERE uasr.id = current_setting('myapp.user_id')::UUID
---   AND uasr.role = 'admin'::e_user_roles
---   AND uasr.expires_at > now();
-
---   IF NOT FOUND THEN RAISE EXCEPTION ''; END IF;
-
---   DELETE FROM user_active_session_roles
---   WHERE user_active_session_roles.id = p_user_id;
-
--- END;
--- $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION get_current_user_role()
