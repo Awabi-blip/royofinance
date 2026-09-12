@@ -14,7 +14,8 @@ from pwdlib import PasswordHash
 from enum import Enum
 import asyncpg
 from decimal import Decimal
-from glide import Batch, ExpireOptions, ExpirySet, ExpiryType
+from glide import Batch, ExpireOptions, ExpirySet, ExpiryType, ClosingError, ConnectionError, TimeoutError, RequestError
+
 import json
 
 db = DatabaseDriver()
@@ -77,17 +78,20 @@ async def jose_exception_handler(request, exc):
     return JSONResponse(status_code=500, 
     content={"detail": str(exc)})
 
-
 async def cache_fetch(key: str, query: str, *args, ttl:int, user_id=None):
     kv = valkey.get_client()
-    
-    cache_response = await kv.get(key)
+
+
+    try:
+        cache_response = await kv.get(key)
+    except (ClosingError, ConnectionError, TimeoutError):
+        cache_response = None
     
     if cache_response:
         return Response(
-            content=cache_response,
-            media_type="application/json"
-        )
+        content=cache_response,
+        media_type="application/json"
+    )
     
     rows = db.fetch_dict(query, args, user_id=user_id)
 
@@ -125,7 +129,11 @@ async def rate_limiter(request: Request, call_next,):
     # but it means the user would have to wait for longer
     batch.expire(key, 60, ExpireOptions.HasNoExpiry)
 
-    results = await kv.exec(batch, raise_on_error = True)
+    try:
+        results = await kv.exec(batch, raise_on_error = True)
+    except (ClosingError, ConnectionError, TimeoutError):
+        return JSONResponse(520, {"detail": "API Unavailable."})
+
 
     requests_count = results[0]
 
@@ -564,6 +572,8 @@ user = Depends(verify_user)):
     # return RedirectResponse(url="/account_info", status_code=303)
 
 class withdrawMoney(StripStringsMixin,BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     account_number : uuid.UUID
     customer_id: uuid.UUID
     amount : Decimal = Field(
@@ -571,7 +581,6 @@ class withdrawMoney(StripStringsMixin,BaseModel):
         le=Decimal('4000000.00')
     )    
     emergency: bool
-    bank_verification_password: str = Field(strip_whitespace=True)
 
 
 @app.post("/withdraw_money")
@@ -636,8 +645,11 @@ info  = RoleRequest
 
     await db.execute("INSER INTO user_roles (id, role) VALUES ($1, $2)",
     info.user_id, info.role, user_id=admin.user_id)
-
-    await kv.delete(f"roles:{info.user_id}")
+    
+    try:
+        await kv.delete(f"roles:{info.user_id}")
+    except (ClosingError, ConnectionError, TimeoutError):
+        continue
 
     return JSONResponse (200, {"Success": "Ok"})
 

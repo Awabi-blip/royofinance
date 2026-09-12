@@ -1,62 +1,11 @@
-import os
-from decimal import Decimal
-
+from utils import get_connection, login_user, login_once
 import psycopg2
 import pytest
-from dotenv import load_dotenv
-
-
-load_dotenv()
-
-
-DATABASE_URL = os.getenv("DATABASE_URL")
+from decimal import Decimal
 
 SENDER_ID = "a0fabb0b-550b-491d-8bc6-9840c2811230"
 RECEIVER_ACCOUNT_NUMBER = "650b8f0d-3080-447a-8776-1e24fbf4c110"
 SENDER_ACCOUNT_TYPE = "saving"
-
-
-def get_connection():
-    return psycopg2.connect(DATABASE_URL)
-
-
-def login_user(connection, user_id, role="customer"):
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT set_config('myapp.user_id', %s, false)
-            """,
-            (str(user_id),)
-        )
-
-        cursor.execute(
-            """
-            SELECT allocate_role(%s::e_user_roles)
-            """,
-            (role,)
-        )
-
-        return cursor.fetchone()[0]
-
-@pytest.fixture(scope="module", autouse=True)
-def login_once():
-    conn = get_connection()
-
-    try:
-        expiry_hours = login_user(
-            conn,
-            SENDER_ID,
-            "customer",
-        )
-
-        assert expiry_hours == 2
-
-        # Keep the active session for the tests.
-        conn.commit()
-
-    finally:
-        conn.close()
-
 
 
 def call_test_send_money(
