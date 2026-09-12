@@ -1,10 +1,10 @@
 -- Active: 1776099699305@@127.0.0.1@5432@banking_system
-
-DROP PROCEDURE send_money;
-
 -- to make it idempotent, I need an idempotent table.
 -- store idempotent keys as UUID.
 -- it has user_id, function, idemotency key.
+
+select * from user_bank_accounts uba join user_auth ua on ua.id = uba.customer_id;
+
 
 
 CREATE OR REPLACE PROCEDURE send_money (
@@ -50,7 +50,7 @@ BEGIN
     INTO    v_sender_account_number
     FROM    user_bank_accounts
     WHERE   customer_id = v_sender_id
-    AND     account_type = p_account_type;
+    AND     account_type = p_sender_account_type;
 
     IF v_sender_account_number = p_receiver_account_number THEN
         RAISE EXCEPTION
@@ -144,6 +144,69 @@ BEGIN
         p_receiver_account_number,
         p_amount
     );
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+DROP FUNCTION test_send_money;
+
+CREATE OR REPLACE FUNCTION test_send_money(
+f_sender_id                UUID,
+f_sender_balance           DECIMAL(19,2),
+f_sender_account_type      e_account_type,
+f_receiver_account_number  UUID,
+f_receiver_balance         DECIMAL(19,2),
+f_amount                   DECIMAL(9,2),
+f_idempotency_key          UUID DEFAULT gen_random_uuid()
+) RETURNS DECIMAL (9,2) 
+SECURITY DEFINER AS $$ 
+DECLARE
+    V_SENDER_BALANCE   DECIMAL(19,4);
+    V_RECEIVER_BALANCE DECIMAL(19,4);
+    v_response         JSONB;
+
+BEGIN
+
+
+    UPDATE user_bank_accounts
+    SET   balance = f_sender_balance
+    WHERE customer_id = f_sender_id
+    AND   account_type = f_sender_account_type;
+    
+    UPDATE user_bank_accounts
+    SET    balance = f_receiver_balance
+    WHERE  account_number = f_receiver_account_number;
+
+
+    PERFORM set_config(
+        'myapp.user_id',
+        f_sender_id::TEXT,
+        true
+    );
+
+    CALL send_money (
+        f_sender_account_type,
+        f_receiver_account_number,
+        f_amount,
+        f_idempotency_key,
+        v_response
+    );
+
+    SELECT balance
+    INTO   V_SENDER_BALANCE 
+    FROM   user_bank_accounts
+    WHERE  customer_id = f_sender_id
+    AND    account_type = f_sender_account_type;
+
+
+    SELECT balance 
+    INTO   V_RECEIVER_BALANCE
+    FROM   user_bank_accounts
+    WHERE  account_number = f_receiver_account_number;
+
+    RETURN V_RECEIVER_BALANCE;
+
 
 END;
 $$ LANGUAGE plpgsql;

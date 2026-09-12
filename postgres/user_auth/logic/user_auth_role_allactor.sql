@@ -1,15 +1,18 @@
+
 CREATE OR REPLACE FUNCTION allocate_role(
-    p_user_id UUID, p_user_role e_user_roles
+    p_user_role e_user_roles
 )
 RETURNS INT
 SECURITY DEFINER
 AS $$
 DECLARE
+    v_user_id UUID := current_setting('myapp.user_id');
     expiry INT;
 BEGIN
+
     IF NOT EXISTS (
         SELECT 1 FROM user_roles
-        WHERE id = p_user_id
+        WHERE id = v_user_id
         AND role = p_user_role
     ) THEN
         RAISE EXCEPTION 'user_id with this role does not exist';
@@ -27,7 +30,7 @@ BEGIN
     END IF;
 
     INSERT INTO user_active_session_roles(id, role, branch_id, started_at, expires_at)
-    VALUES (p_user_id, p_user_role, (SELECT branch_registered_in FROM user_auth WHERE id = p_user_id),
+    VALUES (v_user_id, p_user_role, (SELECT branch_registered_in FROM user_auth WHERE id = v_user_id),
     now(), (now() + (INTERVAL '1 hour' * expiry)) )
     ON CONFLICT(id)
     DO UPDATE

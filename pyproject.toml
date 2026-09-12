@@ -15,3 +15,10 @@ dependencies = [
     "uvicorn>=0.44.0",
     "valkey-glide>=2.5.1",
 ]
+
+[dependency-groups]
+dev = [
+    "psycopg2-binary>=2.9.13",
+    "pytest>=9.1.1",
+    "python-dotenv>=1.2.2",
+]

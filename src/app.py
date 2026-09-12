@@ -291,8 +291,8 @@ response: Response, role_selection_cookie: str = Cookie(None)):
 
     row = await db.fetch(
         """
-        SELECT allocate_role($1, $2)
-        """, decoded_token["id"], r.role
+        SELECT allocate_role($2)
+        """, r.role, user_id=u_id
     )
     
     if len(row) != 1:
@@ -503,8 +503,8 @@ user = Depends(verify_user)):
     p_amount DECIMAL(9,2))  
     """
 
-    response = await db.execute(
-        "CALL send_money($1, $2, $3, $4)",
+    response = await db.fetch(
+        "CALL send_money($1, $2, $3, $4, NULL)",
         info.sender_account_type, 
         info.receiver_account_number, 
         info.amount,
