@@ -78,7 +78,7 @@ async def jose_exception_handler(request, exc):
     return JSONResponse(status_code=500, 
     content={"detail": str(exc)})
 
-async def cache_fetch(key: str, query: str, *args, ttl:int, user_id=None):
+async def cache_fetch(key: str, query: str, args: tuple[str], ttl:int, user_id=None):
     kv = valkey.get_client()
 
 
@@ -93,7 +93,7 @@ async def cache_fetch(key: str, query: str, *args, ttl:int, user_id=None):
         media_type="application/json"
     )
     
-    rows = db.fetch_dict(query, args, user_id=user_id)
+    rows = db.fetch_dict(query, *args, user_id=user_id)
 
     json_rows = json.dumps(rows)
 
@@ -249,14 +249,14 @@ async def show_roles(role_selection_cookie: str = Cookie(None)):
     u_id = decoded_token["id"]
 
     response = await cache_fetch(
-        f"roles:{u_id}",
+        key = f"roles:{u_id}",
         
-        """
+        query = """
         SELECT role FROM user_roles 
         WHERE id = $1
         """,  
         
-        (u_id),
+        args= (u_id),
 
         ttl=1200, user_id=u_id
     )
