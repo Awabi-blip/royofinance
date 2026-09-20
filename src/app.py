@@ -162,17 +162,19 @@ async def signup(user: UserSignup):
 
     # checks is atleast one character an alpha? 
     # any returns true if atleast one of the items are true   
-    if not any(c.is_alpha for c in password):
+    if not any(c.is_alpha for c in user.password):
         return JSONResponse(status_code=400, content={"detail": "Password should have a letter"})
 
-    if not any(c.upper for c in password):
+    if not any(c.upper for c in user.password):
         return JSONResponse(status_code=400, content={"detail": "Password should have an uppercase character"})
 
-    if not any(c.lower for c in password):
+    if not any(c.lower for c in user.password):
         return JSONResponse(status_code=400, content={"detail": "Password should have an uppercase character"})
 
-    if not any(c.is_num for c in password):
+    if not any(c.is_num for c in user.password):
         return JSONResponse(status_code=400, content={"detail": "Password should have a number"})
+
+    password_hash = pwd_hash.hash(user.password)
 
     """
     Function Params:
@@ -185,7 +187,7 @@ async def signup(user: UserSignup):
     await db.execute(
         """
         CALL set_user_password_and_delete_token($1, $2, $3)
-        """, hashed_password, user.username, user.token
+        """, password_hash, user.username, user.token
     )
 
     return {"Success": "Ok"}
