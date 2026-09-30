@@ -3,7 +3,7 @@ from jose import jwt, JWTError
 from fastapi import FastAPI, Header, HTTPException, Depends, Request, Response, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
 from contextlib import asynccontextmanager
-from pydantic import BaseModel, TypeAdapter, Field, field_validator, model_validator,StringConstraints
+from pydantic import BaseModel, TypeAdapter, Field, field_validator, model_validator, StringConstraints, ConfigDict
 from typing import Annotated
 import os, time, uuid, asyncpg, asyncio
 from dotenv import load_dotenv
@@ -20,24 +20,22 @@ import json
 
 db = DatabaseDriver()
 valkey = ValkeyDriver()
+load_dotenv()
+jwt_key = str(os.getenv("JWT_KEY")).strip()
+bank_verification_password = str(os.getenv("BANK_VERIFICATION_PASSWORD")).strip()
+pwd_hash = PasswordHash.recommended()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
     await valkey.connect()
+
     yield
     await db.pool.close()
 
 app = FastAPI(lifespan=lifespan)
 
-
-load_dotenv()
-jwt_key = str(os.getenv("JWT_KEY")).strip()
-bank_verification_password = str(os.getenv("BANK_VERIFICATION_PASSWORD")).strip()
-
-pwd_hash = PasswordHash.recommended()
-
-
+@app.exception_handler(C)
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
@@ -80,7 +78,6 @@ async def jose_exception_handler(request, exc):
 
 async def cache_fetch(key: str, query: str, args: tuple[str], ttl:int, user_id=None):
     kv = valkey.get_client()
-
 
     try:
         cache_response = await kv.get(key)
@@ -211,14 +208,18 @@ async def login(user: UserLogin, response: Response):
     #     raise HTTPException('user does not exist.')
     
     if len(row) != 1:
-        raise HTTPException(400, 'account not found sorrie maybe try siging up first')
+        return JSONResponse(
+            {"message": "account not found maybe try signing up first"}, 400
+        )
     
     user_id: uuid.UUID = row[0]["r_id"]
     password_hash: str = row[0]["r_password_hash"]
 
     if not pwd_hash.verify(user.password, password_hash):
-        raise HTTPException(400, 'user not found')
-
+        return JSONResponse(
+            {"message": "wrong password"}, 400
+        )
+    
     expiry_time = datetime.utcnow() + timedelta(hours=12)
 
     payload = {
@@ -278,12 +279,11 @@ async def role_select(r: Roles,
 response: Response, role_selection_cookie: str = Cookie(None)):  
     
     if role_selection_cookie is None:
-        raise HTTPException(400, "not logged in")
+        return JSONResponse(
+            {"message": "not logged in"}, 400
+        )    
     
-    try:
-        decoded_token = jwt.decode(role_selection_cookie, jwt_key, algorithms=["HS256"])
-    except jose.exceptions.JWTError:
-        raise HTTPException(404, "bad request")
+    decoded_token = jwt.decode(role_selection_cookie, jwt_key, algorithms=["HS256"])
 
     """
     Function Params:
@@ -302,7 +302,9 @@ response: Response, role_selection_cookie: str = Cookie(None)):
     )
     
     if len(row) != 1:
-        raise HTTPException(400, 'user session not verified')
+        return JSONResponse({
+            "message": "unauthorised"
+        }, 400)
     
     expiry_duration = row[0][0]
     expiry_time = datetime.utcnow() + timedelta(hours=expiry_duration)
@@ -338,12 +340,11 @@ class PayloadApp(StripStringsMixin, BaseModel):
 async def verify_user(session_cookie:str = Cookie(None)):
 
     if session_cookie is None:
-        raise HTTPException(400, "role not assigned/user not logged in")
-
-    try:
-        payload = jwt.decode(session_cookie, jwt_key, algorithms=["HS256"])
-    except jose.exceptions.JWTError:
-        raise HTTPException(400, "bad request")
+        return JSONResponse({
+            "message": "user is not logged in"
+        }, 400)
+    
+    payload = jwt.decode(session_cookie, jwt_key, algorithms=["HS256"])
 
     payload = PayloadApp.model_validate(payload)
     
@@ -360,8 +361,10 @@ async def loan_request(amount: LoanRequest,
 user = Depends(verify_user)):
 
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     """
     Function Params:
     PROCEDURE request_loan( 
@@ -378,8 +381,10 @@ user = Depends(verify_user)):
 @app.get("/view_loan_payments_history")
 async def view_loan_payments(user = Depends(verify_user)):
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad_request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     payments = await db.fetch(
     """
     SELECT loan_id, amount_paid, paid_at FROM loan_payments
@@ -394,8 +399,10 @@ async def view_loan_payments(user = Depends(verify_user)):
 @app.get("/view_loans_and_payments")
 async def view_loan_payments(user = Depends(verify_user)):
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad_request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     loans, payments = await asyncio.gather (
     db.fetch(
     """
@@ -432,8 +439,10 @@ user = Depends(verify_user)
 ):
 
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad_request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     """
     Function Params:
     PROCEDURE pay_for_loan (
@@ -459,8 +468,10 @@ user = Depends(verify_user)
 async def account_info(user = Depends(verify_user)):
     
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     user_bank_account_rows = await db.fetch(
         """
         SELECT * FROM user_bank_accounts
@@ -481,7 +492,10 @@ async def show_money(
     user = Depends(verify_user)
 ):
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad_request")
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     
     rows = await db.fetch(
         """
@@ -500,8 +514,10 @@ idempotency_key: UUID = Header(alias="Idempotency-Key"),
 user = Depends(verify_user)):
 
     if user.role != e_user_roles.customer:
-        raise HTTPException(400, "bad_request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     """
     Function Params:
     PROCEDURE send_money (
@@ -550,11 +566,15 @@ async def deposit_money(info: depositMoney,
 user = Depends(verify_user)):
     
     if user.role not in [e_user_roles.admin, e_user_roles.teller]:
-        raise HTTPException(400, "bad request")
-    
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+        
     if info.bank_verification_password != bank_verification_password:
-        raise HTTPException(400, raiden_vs_armstrong)
-
+        return JSONResponse({
+            "message": raiden_vs_armstrong
+        }, 400)
+    
     """
     Function Params:
     PROCEDURE deposit_money (
@@ -590,11 +610,15 @@ async def withdraw_money(info: withdrawMoney,
 user = Depends(verify_user)):
     
     if user.role not in [e_user_roles.admin, e_user_roles.teller]:
-        return JSONResponse(400, "bad request")
-    
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+        
     if info.bank_verification_password != bank_verification_password:
-        return JSONResponse(400, raiden_vs_armstrong)
-    
+        return JSONResponse({
+            "message": raiden_vs_armstrong
+        }, 400)
+        
     """
     Function Params:
     PROCEDURE withdraw_money (
@@ -619,8 +643,10 @@ user = Depends(verify_user)):
 @app.get("/users")
 async def view_user_info(user = Depends(verify_user)):
     if user.role != e_user_roles.admin:
-        raise HTTPException(400, 'unauthorized')
-    
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+        
     rows = await db.fetch(
         """
         SELECT * FROM admins_view_user_info
@@ -643,8 +669,10 @@ info  = RoleRequest
     kv = valkey.get_client()
 
     if admin.role != admin:
-        return JSONResponse(400, "bad request")
-
+        return JSONResponse({
+            "message": "user is not authorised for this action"
+        }, 400)
+    
     await db.execute("INSER INTO user_roles (id, role) VALUES ($1, $2)",
     info.user_id, info.role, user_id=admin.user_id)
     
